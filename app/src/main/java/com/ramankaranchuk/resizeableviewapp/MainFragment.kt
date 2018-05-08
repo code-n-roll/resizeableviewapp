@@ -1,65 +1,113 @@
 package com.ramankaranchuk.resizeableviewapp
 
+import android.animation.ValueAnimator
 import android.os.Bundle
 import android.support.v4.app.Fragment
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import kotlinx.android.synthetic.main.layout_bottom_sheet.*
+import android.util.Log
+import android.view.*
+import android.view.MotionEvent.*
+import android.widget.FrameLayout
+import kotlinx.android.synthetic.main.fragment_main.*
 
 
 class MainFragment : Fragment() {
 
+    companion object {
+        private val TAG = MainFragment::class.java.simpleName
+    }
+
     private var deltaY = 0
 
-    private var dy = 0f
+    private var velocityTracker: VelocityTracker? = null
+
+    private var gestureDetector: GestureDetector = GestureDetector(context, object : GestureListener() {
+        override fun onSwipeTop() {
+            val anim = ValueAnimator.ofInt(cardview.measuredHeight,
+                    main_fragment_root.height - (cardview.layoutParams as FrameLayout.LayoutParams).bottomMargin)
+            anim.addUpdateListener { valueAnimator ->
+                val value = valueAnimator.animatedValue as Int
+                val layoutParams = cardview.layoutParams
+                layoutParams.height = value
+                cardview.layoutParams = layoutParams
+            }
+            anim.setDuration(500)
+                    .start()
+            Log.d("$TAG/gestureDetector", "swipeTop")
+        }
+
+        override fun onSwipeBottom() {
+            val anim = ValueAnimator.ofInt(cardview.measuredHeight,
+                    header.height - (cardview.layoutParams as FrameLayout.LayoutParams).bottomMargin)
+            anim.addUpdateListener { valueAnimator ->
+                val value = valueAnimator.animatedValue as Int
+                val layoutParams = cardview.layoutParams
+                layoutParams.height = value
+                cardview.layoutParams = layoutParams
+            }
+            anim.setDuration(500)
+                    .start()
+            Log.d("$TAG/gestureDetector", "swipeBottom")
+        }
+    })
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         cardview.radius = 40f
-//        cardview.setOnTouchListener { v, event ->
-//            val y = event.rawY.toInt()
-//
-//            val height = v.layoutParams.height
-//
-//            when(event.action) {
-//                MotionEvent.ACTION_DOWN -> {
-//                    deltaY = y - (v.layoutParams as RelativeLayout.LayoutParams).bottomMargin
-//                    dy = v.y - event.rawY
-//                }
-//                MotionEvent.ACTION_MOVE -> {
-//                    val upperBoard = event.rawY + dy
-//                    val bottomBoard = event.rawY + dy + height
-//
-//                    var delta = y - deltaY
-//                    if (upperBoard < 0) {
-//                        delta -= upperBoard.toInt()
-//                    } else if (bottomBoard > this.view!!.height) {
-//                        delta -= bottomBoard.toInt() - this.view!!.height
-//                    }
-//                    val layoutParams = v.layoutParams as RelativeLayout.LayoutParams
-//                    layoutParams.bottomMargin = delta
-//                    layoutParams.topMargin = -layoutParams.bottomMargin
-//                    v.layoutParams = layoutParams
-//
-//                    v.animate().translationY((delta).toFloat())
-//                            .setDuration(0)
-//                            .start()
-//
-//                    Log.d("SFContentFragment",
-//                            "y=$y," +
-//                                    " deltaY=$deltaY," +
-//                                    " y - deltaY=${y - deltaY}," +
-//                                    " // " +
-//                                    " event.rawY + dy=${event.rawY + dy}," +
-//                                    " event.rawY + dy + height=${event.rawY + dy + height} > windowHeight=${this.view!!.height} ? y = windowHeight - height=${this.view!!.height - height}," +
-//                                    " event.rawY + dy=${event.rawY + dy} < 0 ? y = 0")
-//                }
-//            }
-//
-//            true
-//        }
+
+        header.setOnTouchListener { v, event ->
+            gestureDetector.onTouchEvent(event)
+
+            val currentY = event.rawY.toInt()
+
+            Log.d(TAG, " currentY = $currentY," +
+                    " deltaY = $deltaY, " +
+                    " currentY - deltaY = ${currentY - deltaY}," +
+                    " cardview.layoutParams.height = ${(cardview.layoutParams as FrameLayout.LayoutParams).height}," +
+                    " cardview.layoutParams.topMargin = ${(cardview.layoutParams as FrameLayout.LayoutParams).topMargin}," +
+                    " cardview.layoutParams.bottomMargin = ${(cardview.layoutParams as FrameLayout.LayoutParams).bottomMargin}" +
+                    " main_fragment_root.height = ${main_fragment_root.height},")
+
+            when(event.action and ACTION_MASK) {
+                ACTION_DOWN -> {
+                    if (velocityTracker == null) {
+                        velocityTracker = VelocityTracker.obtain()
+                    } else {
+                        velocityTracker?.clear()
+                    }
+
+                    val layoutParams = cardview.layoutParams as FrameLayout.LayoutParams
+                    deltaY = currentY - layoutParams.topMargin
+                }
+
+                ACTION_MOVE -> {
+                    velocityTracker?.addMovement(event)
+
+                    velocityTracker?.computeCurrentVelocity(1000)
+                    Log.d("$TAG/velocity", "x velocity: ${velocityTracker?.xVelocity}, " +
+                            " y velocity: ${velocityTracker?.yVelocity}")
+
+                    val layoutParams = cardview.layoutParams as FrameLayout.LayoutParams
+                    var deltaMove = currentY - deltaY
+
+
+                    if (layoutParams.height + layoutParams.bottomMargin - deltaMove > main_fragment_root.height ||
+                            layoutParams.height - deltaMove + layoutParams.bottomMargin < header.height) {
+                        deltaMove = 0
+                    }
+                    layoutParams.height -= deltaMove
+                    cardview.layoutParams = layoutParams
+                    deltaY = currentY - layoutParams.topMargin
+
+                    cardview.invalidate()
+                }
+
+                ACTION_CANCEL -> {
+                    velocityTracker?.recycle()
+                }
+            }
+            true
+        }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
